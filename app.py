@@ -73,20 +73,6 @@ def get_initial_optim_params(fn_indices, n_iter=600):
         optim_params[i] = {k: v.item() for k, v in tensor_params.items()}
     return optim_params
 
-def get_input_params(initial_optim_params):
-    input_params = {}
-    for fn_i, params in initial_optim_params.items():
-        curr_params = {}
-        for k, v in params.items():
-            curr_params[k] = st.slider(
-                label=k,
-                min_value=0.01,
-                max_value=float(10),
-                value=v
-            ) 
-        input_params[fn_i] = curr_params
-    return input_params
-
 initial_optim_params = get_initial_optim_params(chosen_function_indices, n_iter=200)
 
 ###  DISPLAY MODULES  ###
