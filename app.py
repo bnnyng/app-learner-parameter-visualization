@@ -45,11 +45,13 @@ def visualize_function_periods(function_data):
 #     for fn in sin_data:
 #         visualize_function_periods(fn)
 
-columns = st.columns(5)
+n_cols = 3
+columns = st.columns(n_cols)
 for i, fn in enumerate(sin_data):
     fn_y = fn['all_y']
     true_period = 2 * math.pi / abs(fn['params'][1])
-    col_n = i % 5
+    col_n = i % n_cols
     known_points = np.random.choice(np.arange(300), num_noise, replace=False)
     with columns[col_n]:
         F.evaluate_periodicity(true_x, fn_y, known_points, [period])
+        st.caption(f"True period: {true_period:.4f}")
