@@ -34,28 +34,25 @@ st.session_state.optim_learners = {}
 with st.sidebar:
     # Changes to sidebar inputs will re-run the entire script
     # Choose functions
-    with st.form("choose_functions"):
+    with st.form("sidebar"):
         chosen_function_strings = st.multiselect(
             "Select functions to visualize:",
             [f"Function {i}: {st.session_state.closed_form_strings[i]}" for i in range(len(st.session_state.sin_data))]
         )
         chosen_function_indices = [int(fn_str.split()[1][0]) for fn_str in chosen_function_strings]
-        if st.form_submit_button("Select functions"):
-            st.session_state.chosen_fn_idx = chosen_function_indices
-    # Choose training indices
-    with st.form("choose_train_idx"):
         train_idx_string = st.text_input(
             "(Optional) Enter indices of training points as a list of comma-separated integers:",
             value=None
         )
-        if st.form_submit_button("Select indicies"):
+        if st.form_submit_button("Select"):
+            st.session_state.chosen_fn_idx = chosen_function_indices
             try:
                 train_idx_input = train_idx_string.split(',')
                 train_idx_input = [int(n) for n in train_idx_input]
                 st.session_state.train_idx = train_idx_input
             except:
                 st.write("Oops! Invalid input format.")
-        
+
 
 #####   APP BODY   #####
 
