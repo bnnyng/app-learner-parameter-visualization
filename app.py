@@ -7,96 +7,104 @@ import torch
 import json
 
 import model_torch as model
+import model_functions as M
 import app_functions as F
 
 torch.manual_seed(42)
 
-###  INITIAL VALUES  ###
+# st.title("Visualizing learner parameters")
 
-st.title("Visualizing learner parameters")
+#####   SESSION STATE VARIABLES   #####
 
-# Import function data
 with open('test_stim.json') as json_file:
     true_function_data = json.load(json_file)
-sin_data = true_function_data['sin']
-closed_form_strings = [
+st.session_state.sin_data = true_function_data['sin']
+st.session_state.closed_form_strings = [
     f'y = {A:<.2f} * sin({B:<.2f} * x - {C:<.2f}) + {D:<.2f}'
-    for i in range(len(sin_data))
-    for (A, B, C, D) in [sin_data[i]['params']]
+    for i in range(len(st.session_state.sin_data))
+    for (A, B, C, D) in [st.session_state.sin_data[i]['params']]
 ]
+st.session_state.true_x = torch.arange(0, 6, 0.02)
+st.session_state.train_idx = np.arange(0, 300)
+st.session_state.chosen_fn_idx = None
+st.session_state.optim_learners = {}
 
-# Choose functions
-chosen_function_strings = st.multiselect(
-    "Select functions to visualize:",
-    [f"Function {i}: {closed_form_strings[i]}" for i in range(len(sin_data))]
-)
-chosen_function_indices = [int(fn_str.split()[1][0]) for fn_str in chosen_function_strings]
+#####   SIDEBAR   #####
 
-# Choose training indices
-true_x = torch.arange(0, 6, 0.02)
-train_idx_input = None
-train_idx_string = st.text_input(
-    "(Optional) Enter training indices as a list of comma-separated integers:",
-    value=None
-)
-try:
-    train_idx_input = train_idx_string.split(',')
-    train_idx_input = [int(n) for n in train_idx_input]
-except:
-    # st.write("Oops! Invalid input format.")
-    train_idx_input = None
-train_idxs = np.arange(0, 300) if train_idx_input is None else train_idx_input
+with st.sidebar:
+    # Changes to sidebar inputs will re-run the entire script
+    # Choose functions
+    with st.form("choose_functions"):
+        chosen_function_strings = st.multiselect(
+            "Select functions to visualize:",
+            [f"Function {i}: {st.session_state.closed_form_strings[i]}" for i in range(len(st.session_state.sin_data))]
+        )
+        chosen_function_indices = [int(fn_str.split()[1][0]) for fn_str in chosen_function_strings]
+        if st.form_submit_button("Select functions"):
+            st.session_state.chosen_fn_idx = chosen_function_indices
+    # Choose training indices
+    with st.form("choose_train_idx"):
+        train_idx_string = st.text_input(
+            "(Optional) Enter indices of training points as a list of comma-separated integers:",
+            value=None
+        )
+        if st.form_submit_button("Select indicies"):
+            try:
+                train_idx_input = train_idx_string.split(',')
+                train_idx_input = [int(n) for n in train_idx_input]
+                st.session_state.train_idx = train_idx_input
+            except:
+                st.write("Oops! Invalid input format.")
+        
 
-# Initial optimal inputs
-def get_initial_learner(function_i, n_iter=600):
-    true_period = 2 * math.pi / abs(function_i['params'][1])
-    optim_params = {
-        "sigma": 1,
-        "period": true_period,
-        "length_scale": 1,
-        "noise_sd": 1
-    }
-    optim_learner, _ = F.learner_optim(
-        function_i, true_x, 
-        train_idxs=train_idxs, 
-        params=optim_params,
-        n_iter=n_iter
-    )
-    return optim_learner
+#####   APP BODY   #####
 
-def get_initial_optim_params(fn_indices, n_iter=600):
-    optim_params = {}
-    for i in fn_indices:
-        tensor_params = get_initial_learner(
-            sin_data[i], n_iter=n_iter
-        ).gp_distrib.get_kernels()[0].get_params()
-        optim_params[i] = {k: v.item() for k, v in tensor_params.items()}
-    return optim_params
+# Get optimal parameters for selected functions
+def get_optimal_learners(n_iter=600):
+    for i in st.session_state.chosen_fn_idx:
+        learner = F.get_optimal_learner(
+            function_i=st.session_state.sin_data[i],
+            _true_x=st.session_state.true_x,
+            train_idx=st.session_state.train_idx,
+            n_iter=n_iter
+        )
+        st.session_state.optim_learners[i] = learner
 
-initial_optim_params = get_initial_optim_params(chosen_function_indices, n_iter=200)
-
-###  DISPLAY MODULES  ###
-
-def display_function_module(fn, fn_i, initial_fn_params, plot_title='', closed_form=None, true_period=None):
-    col1, col2 = st.columns(2)
+@st.fragment
+def display_posterior_function(fn_idx):
+    function = st.session_state.sin_data[fn_idx]
+    true_period = F.compute_true_period(function)
+    optim_learner = st.session_state.optim_learners[fn_idx]
+    optim_params = F.get_learner_params(optim_learner)
     input_params = {}
-    with col1:
-        st.write(f"Parameters for function {fn_i} with true period {true_period:<.2f}:")
-        for k, v in initial_fn_params.items():
-            input_params[k] = st.slider(label=k, min_value=0.01, max_value=float(10), value=v)
+    col1, col2 = st.columns(2)
+    with col1: 
+        st.write(f"Parameters for function {fn_idx} with true period {true_period:<.2f}:")
+        for k, v in optim_params.items():
+            # Save input parameter as PyTorch tensor
+            input_params[k] = torch.Tensor([st.slider(
+                label=k, min_value=0.01, max_value=float(10), value=v.item()
+            )])
     with col2:
-        F.evaluate_params(fn, true_x, train_idxs, input_params, plot_title=plot_title)
+        loglike, logprior, logposterior = M.evaluate_params(
+            function_i=function,
+            true_x=st.session_state.true_x,
+            train_idx=st.session_state.train_idx,
+            params=input_params,
+            plot_title=st.session_state.closed_form_strings[fn_idx]
+        )
+        # st.write(f"Loss (logposterior): {logposterior}")
 
-###  APPLICATION BODY  ###
+# Test parameters
+st.header("Visualizing learner parameters")
+if st.session_state.chosen_fn_idx is not None:
+    get_optimal_learners()
+    # for i, learner in st.session_state.optim_learners.items():
+    #     st.write(i, F.get_learner_params(learner))
+    for i in st.session_state.chosen_fn_idx:
+        display_posterior_function(i)
+else:
+    st.write("Use the sidebar to select functions to visualize.")
 
-for i in chosen_function_indices:
-    display_function_module(
-        fn=sin_data[i],
-        fn_i=i,
-        initial_fn_params=initial_optim_params[i],
-        plot_title=f"{closed_form_strings[i]}",
-        true_period=2 * math.pi / abs(sin_data[i]['params'][1])    
-    )
 
-
-
+# TO DO: selecting points loss
