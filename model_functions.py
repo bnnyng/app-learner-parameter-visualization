@@ -157,7 +157,7 @@ def evaluate_params(function_i, true_x, train_idx, params, plot=True, show_known
 
     if plot:
         fig, ax = plot_gp(learner_updated, ys=target_fn(true_x), show_known_points=show_known_points)
-        fig.suptitle(plot_title)
+        fig.suptitle(f"{plot_title}\nLearner loss (log-posterior): {logposterior.item()}")
         st.pyplot(fig)
     
     return loglike, logprior, logposterior
